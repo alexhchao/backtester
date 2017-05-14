@@ -1,13 +1,19 @@
+# Strategy, Performance, SecurityData, FamaFrenchData
+# classes used to test asset allocation strategy
+#  Author: Alex H Chao
+# ================================
+
 import numpy as np
 import pandas as pd
+import argparse
 
 from abc import ABCMeta, abstractmethod
 from pandas_datareader.famafrench import get_available_datasets
+from collections import OrderedDict
 
 import pandas_datareader.data as web
 
-
-from backtester.strategy.helper import *
+from strategy.helper import *
 
 
 class Strategy(object):
@@ -96,14 +102,13 @@ class AssetAllocationStrategy(Strategy):
 
         self.weights = weights
 
-
+"""
+NOT IN USE
 class Portfolio(object):
-    """
-    Portfolio object - given weights and price, generates equity curve
-    """
+ 
     def __init__(self, tickers):
         self.tickers = tickers
-
+"""
 
 class SecurityData(object):
     """
@@ -132,24 +137,30 @@ class Performance(object):
     """
     def __init__(self, equity_curve):
         self.equity_curve = equity_curve
-        self.stats = None
+        self.stats = OrderedDict()
         self.returns = self.equity_curve.pct_change()
-        self.annual_returns = get_annual_returns(self.equity_curve)
         self.ff_regression = None
-        self.annual_alpha = None
+        self.annual_returns = None
 
     def calc_stats(self):
         self.stats = get_stats(self.equity_curve)
+        self.annual_returns = get_annual_returns(self.equity_curve)
 
     def run_fama_french_regression(self, ff_obj):
         if not isinstance(ff_obj,FamaFrenchData):
             raise TypeError('please pass in a FamaFrenchData object..')
         print('Running fama french regression...')
         self.ff_regression = pd.ols(x=ff_obj.data.set_index('date'), y=self.returns*100)
-        self.annual_alpha = self.ff_regression._beta_raw[-1] * 252 # daily
+        self.stats['annual_alpha'] = self.ff_regression._beta_raw[-1] * 252 / 100 # daily
         self.stats['beta'] = self.ff_regression._beta_raw[0]
-        self.stats['annual_alpha'] = self.annual_alpha/100
         self.stats['alpha_t_stat'] = self.ff_regression.t_stat[-1]
+
+    def print_stats(self):
+        print('------------------------ Stats --------------------------')
+        print_dict(self.stats)
+        print('------------------- Annual Returns ----------------------')
+        print(self.annual_returns)
+        print(self.ff_regression)
 
 
 class FamaFrenchData(object):
@@ -183,8 +194,46 @@ class FamaFrenchData(object):
 
 # ====
 
+if __name__ == "__main__":
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--tickers',nargs='*', default = ['SPY','TLT'], help='list of tickers')
+    parser.add_argument('--start', default='20060101', help='Starting date, e.g. 20060101')
+    parser.add_argument('--end', default='20161231', help='Ending date, e.g. 20060101')
+    parser.add_argument('--method', default='static', help='method of rebalance - min_variance, momentum, static')
+    parser.add_argument('--freq', default='BM', help='frequency of rebalance - BA, BM..')
+    parser.add_argument('--ff_model', default='4_factor', help='3_factor or 4_factor ff model')
+
+    import pdb; pdb.set_trace()
+
+    args = parser.parse_args()
+
+    tickers = args.tickers
+    start = args.start
+    end = args.end
+    method = args.method
+    freq = args.freq
+    type = args.ff_model
+
+    data = SecurityData(tickers,start)
+    data.load_data()
+
+    strat = AssetAllocationStrategy(data)
+    strat.run_strategy(freq=freq)
+
+    ff = FamaFrenchData(type=type,start=start)
+    ff.load_data()
+
+    perf = Performance(strat.capital)
+    perf.calc_stats()
+    perf.run_fama_french_regression(ff)
+    perf.print_stats()
+
+
+"""
+
 tickers = ['SPXL','TMF']
-tickers = ['MTUM']
+tickers = ['DFLVX']
 start = datetime(2006,1,1)
 data = SecurityData(tickers,start)
 data.load_data()
@@ -199,16 +248,9 @@ ff.data
 perf = Performance(strat.capital)
 perf.calc_stats()
 perf.run_fama_french_regression(ff)
-perf.ff_regression
-perf.stats
+print(perf.ff_regression)
+perf.print_stats()
 
-# =====
+print(perf)
 
-df = ff.data
-cols = [col for col in df.columns if col not in ['rf']]
-df2 = df[cols]
-
-port_returns_minus_rf = (perf.returns - df.set_index('date').rf).dropna()
-
-pd.ols(x= df2.set_index('date'), y=port_returns_minus_rf*100)
-# hello
+"""

@@ -10,38 +10,6 @@ import matplotlib.pyplot as plt
 from numpy.linalg import inv, qr
 from datetime import datetime
 
-
-def merge_xts(list_df, join='outer'):
-    """
-    Input: multiple xts series e.g. [df1,df2,df3], join = outer, inner, left
-    Output: Returns joined dataframe
-    """
-    return pd.concat(list_df, join=join, axis=1)
-
-
-def get_data_from_yahoo(tickers, start, end=datetime.now(), field='Adj Close'):
-    """
-    Function gets list of tickers, pulls data from yahoo
-    Parameters:
-    tickers --  list of tickers
-    start -- start date
-    end -- end date
-    field --field such as Adj Close, Open, High, Low, Close, Volume
-    """
-    stockRawData = web.DataReader(tickers, 'yahoo', start, end)
-    return stockRawData.ix[field]
-
-
-def convert_frequency(data, freq='BM'):
-    """
-    convert frequency to monthly, annual, etc
-    Parameters:
-    data -- dataframe
-    freq -- BM for monthly, BA for year end 
-    """
-    return data.resample(freq, how='last')
-
-
 def calculate_sharpe(daily_price_series):
     """
     calculate sharpe from daily returns
@@ -78,6 +46,47 @@ def calc_cagr(prices):
     end = prices.index[-1]
     num_years = (end - start).days / 365.0
     return (prices.ix[-1] / prices.ix[0]) ** (1 / num_years) - 1
+
+
+def print_dict(d):
+    """
+    Given dictionary d, prints its contents
+    """
+    for k,v in d.items():
+        print('{} : {}').format(k,v)
+
+
+def merge_xts(list_df, join='outer'):
+    """
+    Input: multiple xts series e.g. [df1,df2,df3], join = outer, inner, left
+    Output: Returns joined dataframe
+    """
+    return pd.concat(list_df, join=join, axis=1)
+
+
+def get_data_from_yahoo(tickers, start, end=datetime.now(), field='Adj Close'):
+    """
+    Function gets list of tickers, pulls data from yahoo
+    Parameters:
+    tickers --  list of tickers
+    start -- start date
+    end -- end date
+    field --field such as Adj Close, Open, High, Low, Close, Volume
+    """
+    stockRawData = web.DataReader(tickers, 'yahoo', start, end)
+    return stockRawData.ix[field]
+
+
+def convert_frequency(data, freq='BM'):
+    """
+    convert frequency to monthly, annual, etc
+    Parameters:
+    data -- dataframe
+    freq -- BM for monthly, BA for year end 
+    """
+    return data.resample(freq, how='last')
+
+
 
 
 def max_drawdown_absolute(returns):
@@ -298,7 +307,8 @@ def get_rolling_beta(my_y, my_x, my_window=252):
 
 def outut_to_excel(list_dfs, xls_path):
     """
-    output a dictionary of dataframes into excel (each df in seperate sheets)
+    output a dictionary of datafram
+    es into excel (each df in seperate sheets)
     list_dfs -- must be in dict format, not list
     xls_path -- filename
     window -- # days rolling period
