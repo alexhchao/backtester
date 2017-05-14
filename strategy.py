@@ -20,6 +20,8 @@ class Strategy(object):
     def __init__(self, securityDataObj):
         self.capital = None
         self.weights = None
+        if not isinstance(securityDataObj,SecurityData):
+            raise TypeError('Please pass in a SecurityData object.')
         self.security_data = securityDataObj
 
     @abstractmethod
@@ -27,9 +29,10 @@ class Strategy(object):
         raise NotImplementedError
 
 
-
 class AssetAllocationStrategy(Strategy):
-
+    """
+    Dynamic Asset allocation strategy based on a rebalance frequency
+    """
     def __init__(self, securityDataObj):
         Strategy.__init__(self, securityDataObj)
 
@@ -37,7 +40,6 @@ class AssetAllocationStrategy(Strategy):
     def run_strategy(self, target_weights=None, freq='BM', method='min_var', lookback=252,
                                      capital=1000):
         """
-        Run asset allocation strategy based on rebalance frequency
         * DYNAMIC WEIGHTS AT EACH REBALANCE PERIOD
         target weights -- list
         freq -- rebalance frequency
@@ -105,8 +107,8 @@ class Portfolio(object):
 
 class SecurityData(object):
     """
-    object to store stock level data - price, returns, tickers
-    Daily freq
+    SecurityData object is used to store stock data - historical price, returns, tickers
+    Daily freq, for now
     """
     def __init__(self, tickers, start, end = datetime.now()):
         self.tickers = tickers
@@ -125,33 +127,34 @@ class SecurityData(object):
         self.returns = self.price.pct_change()
 
 class Performance(object):
-
+    """
+    Performance object is used to performance metrics and stats for a given equity curve
+    """
     def __init__(self, equity_curve):
         self.equity_curve = equity_curve
-        self.returns = None
         self.stats = None
-        self.annual_returns = None
-        self.ff = None
+        self.returns = self.equity_curve.pct_change()
+        self.annual_returns = get_annual_returns(self.equity_curve)
         self.ff_regression = None
         self.annual_alpha = None
 
     def calc_stats(self):
         self.stats = get_stats(self.equity_curve)
-        self.returns = self.equity_curve.pct_change()
-        self.annual_returns = get_annual_returns(self.equity_curve)
 
     def run_fama_french_regression(self, ff_obj):
         if not isinstance(ff_obj,FamaFrenchData):
             raise TypeError('please pass in a FamaFrenchData object..')
         print('Running fama french regression...')
-        self.ff_regression = pd.ols(x=ff_obj.data.set_index('date'), y=self.returns)
-        self.annual_alpha = ff_regression._beta_raw[-1] * 252 # daily
+        self.ff_regression = pd.ols(x=ff_obj.data.set_index('date'), y=self.returns*100)
+        self.annual_alpha = self.ff_regression._beta_raw[-1] * 252 # daily
+        self.stats['beta'] = self.ff_regression._beta_raw[0]
+        self.stats['annual_alpha'] = self.annual_alpha/100
+        self.stats['alpha_t_stat'] = self.ff_regression.t_stat[-1]
 
 
 class FamaFrenchData(object):
     """
-    Used to store fama french factor data
-    
+    FamaFrenchObject is used to store fama french factor data
     """
     def __init__(self,type='4_factor', start = datetime(2006,1,1), end = datetime.now()):
         self.data = None
@@ -175,15 +178,13 @@ class FamaFrenchData(object):
         else:
             raise ValueError('Type not valid, please enter 3_factor, 4_factor, or 5_factor.')
         ff.date = pd.to_datetime(ff.date, format='%Y%m%d')
-        ff.data.iloc[:, 1:] = ff.data.iloc[:, 1:] / 100 # scale the numbers to percentages
+        #ff.data.iloc[:, 1:] = ff.data.iloc[:, 1:] / 100 # scale the numbers to percentages
         self.data = ff[(ff.date >= self.start) & (ff.date <= self.end)]
-
-
 
 # ====
 
 tickers = ['SPXL','TMF']
-tickers = ['ITOT']
+tickers = ['MTUM']
 start = datetime(2006,1,1)
 data = SecurityData(tickers,start)
 data.load_data()
@@ -191,20 +192,22 @@ data.load_data()
 strat = AssetAllocationStrategy(data)
 strat.run_strategy(freq='BM')
 
-strat.capital
-strat.weights
+ff = FamaFrenchData(type='4_factor',start=start)
+ff.load_data()
+ff.data
 
 perf = Performance(strat.capital)
 perf.calc_stats()
 perf.run_fama_french_regression(ff)
 perf.ff_regression
+perf.stats
 
-get_annual_returns(strat.capital)
+# =====
 
-ff = FamaFrenchData(type='4_factor',start=start)
-ff.load_data()
+df = ff.data
+cols = [col for col in df.columns if col not in ['rf']]
+df2 = df[cols]
 
-ff_regression = pd.ols(x=ff.data.set_index('date'), y=stats.returns)
-annual_alpha = ff_regression._beta_raw[-1]*252
+port_returns_minus_rf = (perf.returns - df.set_index('date').rf).dropna()
 
-stats.returns.shape
+pd.ols(x= df2.set_index('date'), y=port_returns_minus_rf*100)
