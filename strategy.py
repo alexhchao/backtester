@@ -211,3 +211,4 @@ df2 = df[cols]
 port_returns_minus_rf = (perf.returns - df.set_index('date').rf).dropna()
 
 pd.ols(x= df2.set_index('date'), y=port_returns_minus_rf*100)
+# hello
