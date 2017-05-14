@@ -2,6 +2,10 @@ import numpy as np
 import pandas as pd
 
 from abc import ABCMeta, abstractmethod
+from pandas_datareader.famafrench import get_available_datasets
+
+import pandas_datareader.data as web
+
 
 from backtester.strategy.helper import *
 
@@ -97,7 +101,6 @@ class Portfolio(object):
     """
     def __init__(self, tickers):
         self.tickers = tickers
-        self.
 
 
 class SecurityData(object):
@@ -105,34 +108,85 @@ class SecurityData(object):
     object to store stock level data - price, returns, tickers
     Daily freq
     """
-    def __init__(self):
-        self.tickers = None
+    def __init__(self, tickers, start, end = datetime.now()):
+        self.tickers = tickers
+        self.start = start
+        self.end = end
         self.returns = None
-
         self.price = None
-        self.start = None
-        self.end = None
 
-    def load_data(self, tickers, start, end = datetime.now()):
+    def load_data(self):
         """
         Loads data from yahoo finance
         :return: 
         """
-        self.tickers = tickers
+        print('Loading data from yahoo finance...')
+        self.price = get_data_from_yahoo(self.tickers, self.start, self.end,'Adj Close').dropna()
+        self.returns = self.price.pct_change()
+
+class Performance(object):
+
+    def __init__(self, equity_curve):
+        self.equity_curve = equity_curve
+        self.returns = None
+        self.stats = None
+        self.annual_returns = None
+        self.ff = None
+        self.ff_regression = None
+        self.annual_alpha = None
+
+    def calc_stats(self):
+        self.stats = get_stats(self.equity_curve)
+        self.returns = self.equity_curve.pct_change()
+        self.annual_returns = get_annual_returns(self.equity_curve)
+
+    def run_fama_french_regression(self, ff_obj):
+        if not isinstance(ff_obj,FamaFrenchData):
+            raise TypeError('please pass in a FamaFrenchData object..')
+        print('Running fama french regression...')
+        self.ff_regression = pd.ols(x=ff_obj.data.set_index('date'), y=self.returns)
+        self.annual_alpha = ff_regression._beta_raw[-1] * 252 # daily
+
+
+class FamaFrenchData(object):
+    """
+    Used to store fama french factor data
+    
+    """
+    def __init__(self,type='4_factor', start = datetime(2006,1,1), end = datetime.now()):
+        self.data = None
+        self.type = type
         self.start = start
         self.end = end
 
-        print('Loading data from yahoo finance...')
-        self.price = get_data_from_yahoo(self.tickers, start, end,'Adj Close').dropna()
-        self.returns = self.price.pct_change()
+    def load_data(self):
+        print('Loading fama french factor data..')
+        if self.type == '4_factor': # 3 factor plus momentum
+            ff_3 = web.DataReader("F-F_Research_Data_Factors_daily", "famafrench")[0]
+            ff_mom = web.DataReader("F-F_Momentum_Factor_daily", "famafrench")[1]
+            ff = pd.merge(ff_3, ff_mom, left_index=True, right_index=True).reset_index()
+            ff.columns = ['date','mkt-rf','smb','hml','rf','umd']
+        elif self.type == '3_factor':
+            ff = web.DataReader("F-F_Research_Data_Factors_daily", "famafrench")[0].reset_index()
+            ff.columns = ['date', 'mkt-rf', 'smb', 'hml', 'rf']
+        elif self.type == '5_factor':
+            ff = web.DataReader("F-F_Research_Data_5_Factors_2x3_daily", "famafrench").reset_index()
+            ff.columns = ['date', 'mkt-rf', 'smb', 'hml', 'rmw','cma','rf']
+        else:
+            raise ValueError('Type not valid, please enter 3_factor, 4_factor, or 5_factor.')
+        ff.date = pd.to_datetime(ff.date, format='%Y%m%d')
+        ff.data.iloc[:, 1:] = ff.data.iloc[:, 1:] / 100 # scale the numbers to percentages
+        self.data = ff[(ff.date >= self.start) & (ff.date <= self.end)]
+
 
 
 # ====
 
-tickers = ['SPY','TLT','VWO','GLD']
+tickers = ['SPXL','TMF']
+tickers = ['ITOT']
 start = datetime(2006,1,1)
-data = SecurityData()
-data.load_data(tickers,start)
+data = SecurityData(tickers,start)
+data.load_data()
 
 strat = AssetAllocationStrategy(data)
 strat.run_strategy(freq='BM')
@@ -140,6 +194,17 @@ strat.run_strategy(freq='BM')
 strat.capital
 strat.weights
 
-get_stats(strat.capital)
+perf = Performance(strat.capital)
+perf.calc_stats()
+perf.run_fama_french_regression(ff)
+perf.ff_regression
 
 get_annual_returns(strat.capital)
+
+ff = FamaFrenchData(type='4_factor',start=start)
+ff.load_data()
+
+ff_regression = pd.ols(x=ff.data.set_index('date'), y=stats.returns)
+annual_alpha = ff_regression._beta_raw[-1]*252
+
+stats.returns.shape
