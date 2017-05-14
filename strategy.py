@@ -204,7 +204,7 @@ if __name__ == "__main__":
     parser.add_argument('--freq', default='BM', help='frequency of rebalance - BA, BM..')
     parser.add_argument('--ff_model', default='4_factor', help='3_factor or 4_factor ff model')
 
-    import pdb; pdb.set_trace()
+    #import pdb; pdb.set_trace()
 
     args = parser.parse_args()
 
